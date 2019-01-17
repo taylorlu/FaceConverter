@@ -312,9 +312,6 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
             verticesTemp[count++] = float(*(posTemp+ ind));
             verticesTemp[count++] = float(*(posTemp+256*256   + ind));
             verticesTemp[count++] = float(*(posTemp+256*256*2 + ind));
-
-//            if(i>20000 && i<20010)
-//                printf("%d = %lf, %lf, %lf\n",i, *(posTemp+ ind), *(posTemp+256*256   + ind), *(posTemp+256*256*2 + ind));
         }
         
         int *triangles = (int *)face_data.triangles.data();
@@ -326,11 +323,6 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         // new_image ==> (rgb, rgb, rgb, ...)
         _render_colors_core(new_image, verticesTemp, triangles, textureColor, depth_buffer, nver, ntri, h, w, 3);
         
-//        printf("%f, %f, %f\n", *(new_image+ (w*250+250)*3), *(new_image+ (w*250+250)*3+1), *(new_image+ (w*250+250)*3+2));
-//        printf("%f, %f, %f\n", *(new_image+ (w*250+251)*3), *(new_image+ (w*250+251)*3+1), *(new_image+ (w*250+251)*3+2));
-//        printf("%f, %f, %f\n", *(new_image+ (w*250+250)*3), *(new_image+ (w*251+250)*3+1), *(new_image+ (w*251+250)*3+2));
-//        printf("%f, %f, %f\n", *(new_image+ (w*250+251)*3), *(new_image+ (w*251+251)*3+1), *(new_image+ (w*251+251)*3+2));
-
         for(int i=0; i<w*h; i++) {
             depth_buffer[i] = -999999.0;
         }
@@ -393,36 +385,38 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         int top = finalBbox[maxProbIndex].y1;
         int bottom = finalBbox[maxProbIndex].y2;
 
-        printf("%d, %d, %d, %d\n", left, right, top, bottom);
-        
         float old_size = (right-left+bottom-top)/2.0;
         float centerX = right - (right-left)/2.0;
         float centerY = bottom - (bottom-top)/2 + old_size*0.14;
         int size = int(old_size*1.58);
         
-        float a1 = centerX-size/2.0;
-        float a2 = centerY-size/2.0;
-        float a3 = a1;
-        float a4 = centerY+size/2.0;
-        float a5 = centerX+size/2.0;
-        float a6 = a2;
+        int x1 = centerX-size/2;
+        int y1 = centerY-size/2;
+        int x2 = centerX+size/2;
+        int y2 = centerY+size/2;
+        int width = x2 - x1;
+        int height = y2 - y1;
         
-        float b1 = 0.0;
-        float b2 = 0.0;
-        float b3 = 0.0;
-        float b4 = 255.0;
-        float b5 = 255.0;
-        float b6 = 0.0;
+        double scale = 256.0/width;
+        double transX = -x1*scale;
+        double transY = -y1*scale;
         
-        float src[6] ={a1,a2,a3,a4,a5,a6};
-        cv::Mat srcMat = cv::Mat(3,2, CV_32F, src);
-        float dst[6] ={b1,b2,b3,b4,b5,b6};
-        cv::Mat dstMat = cv::Mat(3,2, CV_32F, dst);
-        cv::Mat tform = cv::estimateRigidTransform(srcMat, dstMat, false);
-        cout << "tform = "<< endl << " "  << tform << endl << endl;
-
+        if(x2>imgMat.cols) {
+            cv::copyMakeBorder(imgMat, imgMat, 0, 0, 0, x2-imgMat.cols, cv::BORDER_CONSTANT, cv::Scalar(0));
+        }
+        if(x1<0) {
+            cv::copyMakeBorder(imgMat, imgMat, 0, 0, -x1, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
+            x1 = 0;
+        }
+        if(y2>imgMat.rows) {
+            cv::copyMakeBorder(imgMat, imgMat, 0, y2-imgMat.rows, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
+        }
+        if(y1<0) {
+            cv::copyMakeBorder(imgMat, imgMat, -y1, 0, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
+            y1 = 0;
+        }
         cv::Mat cropped_image;
-        cv::warpAffine(imgMat, cropped_image, tform, cv::Size(256,256));
+        cv::resize(imgMat(cv::Rect(x1, y1, width, height)), cropped_image, cv::Size(256,256));
         
         vector<cv::Mat> xc;
         split(cropped_image, xc);
@@ -443,27 +437,20 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         prnetOutput *output = [irModel predictionFromPlaceholder__0:arr error:nil];
         MLMultiArray *multiArr = [output resfcn256__Conv2d_transpose_16__Sigmoid__0];
 
-        cv::Mat posMat1;
-        posMat1.create(1, 256*256, CV_64F);
-        cv::Mat posMat2;
-        posMat2.create(1, 256*256, CV_64F);
-        cv::Mat posMat3;
-        posMat3.create(1, 256*256, CV_64F);
-
         int plannerSize = [[multiArr strides][0] intValue];
         double *dataPointer = (double *)[multiArr dataPointer];
         for(int i=0; i<plannerSize*3; i++) {
             dataPointer[i] *= 1.1*256;
         }
-        memcpy(posMat1.data, dataPointer, plannerSize*sizeof(double));
-        memcpy(posMat2.data, dataPointer + plannerSize, plannerSize*sizeof(double));
-        memcpy(posMat3.data, dataPointer + plannerSize*2, plannerSize*sizeof(double));
+        
+        cv::Mat posMat1(1,256*256,CV_64F, dataPointer);
+        cv::Mat posMat2(1,256*256,CV_64F, dataPointer + plannerSize);
+        cv::Mat posMat3(1,256*256,CV_64F, dataPointer + plannerSize*2);
 
-        cv::Mat z = posMat3/tform.at<cv::Vec2d>(0, 0)[0];
+        double tformData[9] = {scale,0.0,transX, 0.0,scale,transY, 0.0,0.0,1.0};
+        cv::Mat tform(3,3,CV_64F, tformData);
+        cv::Mat z = posMat3/scale;
         posMat3.setTo(cv::Scalar(1));
-
-        double homoAdd[3] ={0.0,0.0,1.0};
-        tform.push_back(cv::Mat(1,3,CV_64F, homoAdd));
 
         cv::Mat posMats;
         posMats.push_back(posMat1);
@@ -485,7 +472,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     NSArray *cameraArray = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
     for (AVCaptureDevice *device in cameraArray) {
-        if ([device position] == AVCaptureDevicePositionBack) {
+        if ([device position] == AVCaptureDevicePositionFront) {
             inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:device error:nil];
         }
     }
@@ -519,7 +506,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     LoadFaceData([[[NSBundle mainBundle] resourcePath] UTF8String], &face_data);
     
     
-    cv::Mat imgMat = cv::imread([[[NSBundle mainBundle] pathForResource:@"3" ofType:@"jpg"] UTF8String]);
+    cv::Mat imgMat = cv::imread([[[NSBundle mainBundle] pathForResource:@"ref" ofType:@"jpg"] UTF8String]);
     posTemp = (double *)malloc(256*256*3*sizeof(double));
     verticesTemp = (float *)malloc(256*256*3*sizeof(float));
     new_image = (float *)malloc(640*480*3*sizeof(float));
@@ -534,14 +521,6 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     double *pos = (double *)malloc(256*256*3*sizeof(double));
     int faceCount = [self process:imgMat :pos]; // pos ==> (rrrrr..., ggggg..., bbbbb...)
     if(faceCount>0) {
-        
-//        for(int i=140;i<150;i++) {
-//            for(int j=140;j<150;j++) {
-//                printf("%lf, %lf, %lf\n", pos[i*256+j], pos[i*256+j + 256*256], pos[i*256+j + 256*256*2]);
-//            }
-//            printf("\n");
-//        }
-        
         
         cv::Mat ref_pos1 = cv::Mat(256,256, CV_64F, pos);
         cv::Mat ref_pos2 = cv::Mat(256,256, CV_64F, pos + 256*256);
@@ -568,16 +547,11 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
             texture_color[count++] = *((float *)xc2[0].data+ ind);
             texture_color[count++] = *((float *)xc2[1].data+ ind);
             texture_color[count++] = *((float *)xc2[2].data+ ind);
-//            if(i>=0 && i<10) {
-//                printf("%f, %f, %f\n", *((float *)xc2[2].data+ ind), *((float *)xc2[1].data+ ind), *((float *)xc2[0].data+ ind));
-//            }
         }
-        
     }
     
     [session startRunning];
     isCapture = true;
-    
     
 }
 
