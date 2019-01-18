@@ -320,18 +320,15 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
             depth_buffer[i] = -999999.0;
         }
 
-        // new_image ==> (rgb, rgb, rgb, ...)
-        _render_colors_core(new_image, verticesTemp, triangles, textureColor, depth_buffer, nver, ntri, h, w, 3);
         
-        for(int i=0; i<w*h; i++) {
-            depth_buffer[i] = -999999.0;
-        }
         float *vis_colors = (float *)malloc(nver*sizeof(float));
         for(int i=0; i<nver; i++) {
             vis_colors[i] = 1;
         }
         memset(face_mask, 0, 640*480*sizeof(float));
-        _render_colors_core(face_mask, verticesTemp, triangles, vis_colors, depth_buffer, nver, ntri, h, w, 1);
+        
+        // new_image ==> (rgb, rgb, rgb, ...)
+        _render_colors_core(new_image, face_mask, verticesTemp, triangles, textureColor, vis_colors, depth_buffer, nver, ntri, h, w, 3);
         free(vis_colors);
         
         vector<cv::Mat> xc;
@@ -384,11 +381,11 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         int right = finalBbox[maxProbIndex].x2;
         int top = finalBbox[maxProbIndex].y1;
         int bottom = finalBbox[maxProbIndex].y2;
-
+        
         float old_size = (right-left+bottom-top)/2.0;
         float centerX = right - (right-left)/2.0;
         float centerY = bottom - (bottom-top)/2 + old_size*0.14;
-        int size = int(old_size*1.58);
+        int size = int(old_size*1.38);
         
         int x1 = centerX-size/2;
         int y1 = centerY-size/2;
@@ -472,7 +469,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     NSArray *cameraArray = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
     for (AVCaptureDevice *device in cameraArray) {
-        if ([device position] == AVCaptureDevicePositionFront) {
+        if ([device position] == AVCaptureDevicePositionBack) {
             inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:device error:nil];
         }
     }

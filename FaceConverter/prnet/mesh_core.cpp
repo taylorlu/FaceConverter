@@ -167,8 +167,8 @@ void _rasterize_triangles_core(
 
 
 void _render_colors_core(
-    float* image, float* vertices, int* triangles, 
-    float* colors, 
+    float* image, float *face_mask, float* vertices, int* triangles, 
+    float* colors, float *vis_colors,
     float* depth_buffer,
     int nver, int ntri,
     int h, int w, int c)
@@ -221,7 +221,8 @@ void _render_colors_core(
                             p_color = (p0_color+p1_color+p2_color)/3;
                             image[y*w*c + x*c + k] = p_color;
                         }
-
+                        face_mask[y*w + x] = vis_colors[tri_p0_ind];
+                        
                         depth_buffer[y*w + x] = p_depth;
                     }
                 }

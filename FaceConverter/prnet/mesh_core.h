@@ -61,8 +61,8 @@ void _rasterize_triangles_core(
     int h, int w);
 
 void _render_colors_core(
-    float* image, float* vertices, int* triangles, 
-    float* colors, 
+    float* image, float *face_mask, float* vertices, int* triangles, 
+    float* colors, float *vis_colors,
     float* depth_buffer,
     int nver, int ntri,
     int h, int w, int c);
