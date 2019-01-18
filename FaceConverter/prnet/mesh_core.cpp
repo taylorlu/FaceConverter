@@ -180,7 +180,6 @@ void _render_colors_core(
     int x_min, x_max, y_min, y_max;
     float p_depth, p0_depth, p1_depth, p2_depth;
     float p_color, p0_color, p1_color, p2_color;
-    float weight[3];
 
     for(i = 0; i < ntri; i++)
     {
@@ -202,7 +201,8 @@ void _render_colors_core(
         {
             continue;
         }
-
+        p_depth = (p0_depth+p1_depth+p2_depth)/3;
+        
         for(y = y_min; y <= y_max; y++) //h
         {
             for(x = x_min; x <= x_max; x++) //w
@@ -210,9 +210,6 @@ void _render_colors_core(
                 p.x = x; p.y = y;
                 if(p.x < 2 || p.x > w - 3 || p.y < 2 || p.y > h - 3 || isPointInTri(p, p0, p1, p2))
                 {
-                    get_point_weight(weight, p, p0, p1, p2);
-                    p_depth = weight[0]*p0_depth + weight[1]*p1_depth + weight[2]*p2_depth;
-
                     if((p_depth > depth_buffer[y*w + x]))
                     {
                         for(k = 0; k < c; k++) // c
@@ -221,7 +218,7 @@ void _render_colors_core(
                             p1_color = colors[c*tri_p1_ind + k];
                             p2_color = colors[c*tri_p2_ind + k]; 
 
-                            p_color = weight[0]*p0_color + weight[1]*p1_color + weight[2]*p2_color;
+                            p_color = (p0_color+p1_color+p2_color)/3;
                             image[y*w*c + x*c + k] = p_color;
                         }
 
