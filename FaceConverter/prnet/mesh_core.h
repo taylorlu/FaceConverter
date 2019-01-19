@@ -61,10 +61,10 @@ void _rasterize_triangles_core(
     int h, int w);
 
 void _render_colors_core(
-    float* image, float *face_mask, float* vertices, int* triangles, 
-    float* colors, float *vis_colors,
+    float* image, uint8_t *face_mask, float* vertices, int* triangles,
+    float* colors,
     float* depth_buffer,
-    int nver, int ntri,
+    int ntri,
     int h, int w, int c);
 
 void _render_texture_core(
@@ -80,4 +80,4 @@ void _write_obj_with_colors_texture(string filename, string mtl_name,
     float* vertices, int* triangles, float* colors, float* uv_coords,
     int nver, int ntri, int ntexver);
 
-#endif
+#endif

@@ -167,10 +167,10 @@ void _rasterize_triangles_core(
 
 
 void _render_colors_core(
-    float* image, float *face_mask, float* vertices, int* triangles, 
-    float* colors, float *vis_colors,
+    float* image, uint8_t *face_mask, float* vertices, int* triangles,
+    float* colors,
     float* depth_buffer,
-    int nver, int ntri,
+    int ntri,
     int h, int w, int c)
 {
     int i;
@@ -208,23 +208,20 @@ void _render_colors_core(
             for(x = x_min; x <= x_max; x++) //w
             {
                 p.x = x; p.y = y;
-                if(p.x < 2 || p.x > w - 3 || p.y < 2 || p.y > h - 3 || isPointInTri(p, p0, p1, p2))
+                if(p_depth > depth_buffer[y*w + x] && isPointInTri(p, p0, p1, p2))
                 {
-                    if((p_depth > depth_buffer[y*w + x]))
+                    for(k = 0; k < c; k++) // c
                     {
-                        for(k = 0; k < c; k++) // c
-                        {   
-                            p0_color = colors[c*tri_p0_ind + k];
-                            p1_color = colors[c*tri_p1_ind + k];
-                            p2_color = colors[c*tri_p2_ind + k]; 
+                        p0_color = colors[c*tri_p0_ind + k];
+                        p1_color = colors[c*tri_p1_ind + k];
+                        p2_color = colors[c*tri_p2_ind + k];
 
-                            p_color = (p0_color+p1_color+p2_color)/3;
-                            image[y*w*c + x*c + k] = p_color;
-                        }
-                        face_mask[y*w + x] = vis_colors[tri_p0_ind];
-                        
-                        depth_buffer[y*w + x] = p_depth;
+                        p_color = (p0_color+p1_color+p2_color)/3;
+                        image[y*w*c + x*c + k] = p_color;
                     }
+                    face_mask[y*w + x] = 255;
+                    
+                    depth_buffer[y*w + x] = p_depth;
                 }
             }
         }

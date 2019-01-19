@@ -52,11 +52,11 @@
     cv::Mat resultMat;
     float *baseMatrix;
     double *inputData;
-    double *posTemp;
+    float *posTemp;
     float *verticesTemp;
     float *new_image;
-    float *face_mask;
-    float *output_image;
+    uint8_t *face_mask;
+    uint8_t *output_image;
     float *depth_buffer;
     
     float *texture_color;

@@ -199,9 +199,9 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     cv::Mat frame;
     merge(chn, 3, frame);
-    
+
     cv::Mat outMat = [self renderTexture:frame :texture_color: output_image];
-    
+
     dispatch_async(dispatch_get_main_queue(), ^{
         [[self imageView] setImage:[self UIImageFromCVMat:outMat]];
     });
@@ -292,7 +292,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
 }
 
--(cv::Mat) renderTexture:(cv::Mat) targetMat :(float *) textureColor :(float *) outputImage {
+-(cv::Mat) renderTexture:(cv::Mat) targetMat :(float *) textureColor :(uint8_t *) outputImage {
     
     // textureColor ==> (rgb, rgb, rgb, ...)
     int w = targetMat.cols;
@@ -319,38 +319,28 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         for(int i=0; i<w*h; i++) {
             depth_buffer[i] = -999999.0;
         }
-
         
-        float *vis_colors = (float *)malloc(nver*sizeof(float));
-        for(int i=0; i<nver; i++) {
-            vis_colors[i] = 1;
-        }
-        memset(face_mask, 0, 640*480*sizeof(float));
+        memset(face_mask, 0, 640*480*sizeof(uint8_t));
         
         // new_image ==> (rgb, rgb, rgb, ...)
-        _render_colors_core(new_image, face_mask, verticesTemp, triangles, textureColor, vis_colors, depth_buffer, nver, ntri, h, w, 3);
-        free(vis_colors);
+        _render_colors_core(new_image, face_mask, verticesTemp, triangles, textureColor, depth_buffer, ntri, h, w, 3);
         
         vector<cv::Mat> xc;
         split(targetMat, xc);
         
-        cv::Mat mmm = cv::Mat(targetMat.rows, targetMat.cols, CV_32F, face_mask)*255;
-        mmm.convertTo(mmm, CV_8U);
-        cv::Rect rect = cv::boundingRect(mmm);
+        cv::Mat maskMat = cv::Mat(targetMat.rows, targetMat.cols, CV_8U, face_mask);
+        cv::Rect rect = cv::boundingRect(maskMat);
         
         count = 0;
         for(int i=0; i<w*h; i++) {
-            outputImage[count++] = *(xc[2].data+i)*(1-face_mask[i]) + new_image[i*3+2]*face_mask[i]*255;
-            outputImage[count++] = *(xc[1].data+i)*(1-face_mask[i]) + new_image[i*3+1]*face_mask[i]*255;
-            outputImage[count++] = *(xc[0].data+i)*(1-face_mask[i]) + new_image[i*3]*face_mask[i]*255;
+            outputImage[count++] = uint8_t( *(xc[2].data+i)*(255-face_mask[i]) + new_image[i*3+2]*face_mask[i] );
+            outputImage[count++] = uint8_t( *(xc[1].data+i)*(255-face_mask[i]) + new_image[i*3+1]*face_mask[i] );
+            outputImage[count++] = uint8_t( *(xc[0].data+i)*(255-face_mask[i]) + new_image[i*3]*face_mask[i] );
         }
         
-        cv::Mat ooo = cv::Mat(targetMat.rows, targetMat.cols, CV_32FC3, outputImage);
-        ooo.convertTo(ooo, CV_8U);
-        
+        cv::Mat ooo = cv::Mat(targetMat.rows, targetMat.cols, CV_8UC3, outputImage);
         cv::Mat outMat;
-        cv::Mat maskMat = cv::Mat(targetMat.rows, targetMat.cols, CV_32F, face_mask)*255;
-        maskMat.convertTo(maskMat, CV_8U);
+        
         cv::seamlessClone(ooo, targetMat, maskMat, cv::Point(int(rect.x+rect.width/2), int(rect.y+rect.height/2)), outMat, cv::NORMAL_CLONE);
         
         return outMat;
@@ -358,13 +348,13 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     return targetMat;
 }
 
--(int) process: (cv::Mat) imgMat :(double *) pos{
+-(int) process: (cv::Mat) imgMat :(float *) pos{
     
     ncnn::Mat ncnn_img = ncnn::Mat::from_pixels(imgMat.data, ncnn::Mat::PIXEL_BGR2RGB, imgMat.cols, imgMat.rows);
     std::vector<Bbox> finalBbox;
 
     mtcnn.detect(ncnn_img, finalBbox);
-    
+
     int num_box = (int)finalBbox.size();
     vector<uint32_t> realPos;
     
@@ -457,8 +447,9 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         cv::Mat vertices;
         vertices = tform.inv()*posMats;
         z.row(0).copyTo(vertices.row(2));
+        vertices.convertTo(vertices, CV_32F);
 
-        memcpy(pos, vertices.data, 256*256*3*sizeof(double));
+        memcpy(pos, vertices.data, 256*256*3*sizeof(float));
         
         return 1;
     }
@@ -502,25 +493,24 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     LoadFaceData([[[NSBundle mainBundle] resourcePath] UTF8String], &face_data);
     
-    
-    cv::Mat imgMat = cv::imread([[[NSBundle mainBundle] pathForResource:@"ref" ofType:@"jpg"] UTF8String]);
-    posTemp = (double *)malloc(256*256*3*sizeof(double));
+    cv::Mat imgMat = cv::imread([[[NSBundle mainBundle] pathForResource:@"3" ofType:@"jpg"] UTF8String]);
+    posTemp = (float *)malloc(256*256*3*sizeof(float));
     verticesTemp = (float *)malloc(256*256*3*sizeof(float));
     new_image = (float *)malloc(640*480*3*sizeof(float));
-    face_mask = (float *)malloc(640*480*sizeof(float));
-    output_image = (float *)malloc(640*480*3*sizeof(float));
+    face_mask = (uint8_t *)malloc(640*480*sizeof(uint8_t));
+    output_image = (uint8_t *)malloc(640*480*3*sizeof(uint8_t));
     
     memset(new_image, 0, 640*480*3*sizeof(float));
-    memset(face_mask, 0, 640*480*sizeof(float));
-    memset(output_image, 0, 640*480*3*sizeof(float));
+    memset(face_mask, 0, 640*480*sizeof(uint8_t));
+    memset(output_image, 0, 640*480*3*sizeof(uint8_t));
     
     depth_buffer = (float *)malloc(640*480*sizeof(float));
-    double *pos = (double *)malloc(256*256*3*sizeof(double));
+    float *pos = (float *)malloc(256*256*3*sizeof(float));
     int faceCount = [self process:imgMat :pos]; // pos ==> (rrrrr..., ggggg..., bbbbb...)
     if(faceCount>0) {
         
-        cv::Mat ref_pos1 = cv::Mat(256,256, CV_64F, pos);
-        cv::Mat ref_pos2 = cv::Mat(256,256, CV_64F, pos + 256*256);
+        cv::Mat ref_pos1 = cv::Mat(256,256, CV_32F, pos);
+        cv::Mat ref_pos2 = cv::Mat(256,256, CV_32F, pos + 256*256);
         
         cv::Mat posMat;
         vector<cv::Mat> posMats;
@@ -528,7 +518,6 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         posMats.push_back(ref_pos2);
         cv::merge(posMats, posMat);
         
-        posMat.convertTo(posMat, CV_32FC2);
         imgMat.convertTo(imgMat, CV_32FC3, 1/256.0);
         
         cv::Mat remapMat;
