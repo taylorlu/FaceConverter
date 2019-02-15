@@ -74,6 +74,22 @@ cv::Mat drawKeyPoint(const cv::Mat &img, vector<uint32_t> realPos) {
     }
     return show;
 }
+
+void drawPose(const cv::Mat &img, cv::Mat point_2d) {
+    
+    if(!point_2d.empty()) {
+        
+        point_2d.convertTo(point_2d, CV_32S);
+        cv::polylines(img, point_2d, TRUE, CV_RGB(0, 255, 0), 2, cv::LINE_AA);
+        
+        cv::line(img, cv::Point(point_2d.at<uint32_t>(1,0), point_2d.at<uint32_t>(1,1)), cv::Point(point_2d.at<uint32_t>(6,0), point_2d.at<uint32_t>(6,1)), CV_RGB(0, 255, 0), 2, cv::LINE_AA);
+        
+        cv::line(img, cv::Point(point_2d.at<uint32_t>(2,0), point_2d.at<uint32_t>(2,1)), cv::Point(point_2d.at<uint32_t>(7,0), point_2d.at<uint32_t>(7,1)), CV_RGB(0, 255, 0), 2, cv::LINE_AA);
+        
+        cv::line(img, cv::Point(point_2d.at<uint32_t>(3,0), point_2d.at<uint32_t>(3,1)), cv::Point(point_2d.at<uint32_t>(8,0), point_2d.at<uint32_t>(8,1)), CV_RGB(0, 255, 0), 2, cv::LINE_AA);
+    }
+}
+
 cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     cv::Mat show = img.clone();
@@ -120,51 +136,189 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     return multiArr;
 }
 
-//-(cv::Mat)facePRNetCoreML:(cv::Mat) faceCrop {  //usr coreml.
-//
-//    cv::resize(faceCrop, faceCrop, cv::Size(256, 256));
-//    vector<cv::Mat> xc;
-//    split(faceCrop, xc);
-//
-//    int count = 0;
-//    for(int i=0; i<256*256; i++) {
-//        inputData[count++] = *(xc[0].data+i);
-//    }
-//    for(int i=0; i<256*256; i++) {
-//        inputData[count++] = *(xc[1].data+i);
-//    }
-//    for(int i=0; i<256*256; i++) {
-//        inputData[count++] = *(xc[2].data+i);
-//    }
-//
-//    MLMultiArray *arr = [[MLMultiArray alloc] initWithDataPointer:inputData shape:[NSArray arrayWithObjects:[NSNumber numberWithInt:3], [NSNumber numberWithInt:256], [NSNumber numberWithInt:256], nil] dataType:MLMultiArrayDataTypeDouble strides:[NSArray arrayWithObjects:[NSNumber numberWithInt:256*256], [NSNumber numberWithInt:256], [NSNumber numberWithInt:1], nil] deallocator:nil error:nil];
-//
-//    prnetOutput *output = [irModel predictionFromPlaceholder__0:arr error:nil];
-//    MLMultiArray *multiArr = [output resfcn256__Conv2d_transpose_16__Sigmoid__0];
-//
-//    cv::Mat posMat1;
-//    posMat1.create(256,256, CV_64F);
-//    cv::Mat posMat2;
-//    posMat2.create(256,256, CV_64F);
-//    cv::Mat posMat3;
-//    posMat3.create(256,256, CV_64F);
-//
-//    int plannerSize = [[multiArr strides][0] intValue];
-//    memcpy(posMat1.data, [multiArr dataPointer], plannerSize*sizeof(double));
-//    memcpy(posMat2.data, (double *)[multiArr dataPointer] + plannerSize, plannerSize*sizeof(double));
-//    memcpy(posMat3.data, (double *)[multiArr dataPointer] + plannerSize*2, plannerSize*sizeof(double));
-//
-//    vector<cv::Mat> posMats;
-//    posMats.push_back(posMat1);
-//    posMats.push_back(posMat2);
-//    posMats.push_back(posMat3);
-//
-//    cv::Mat retMat;
-//    cv::merge(posMats, retMat);
-//    return retMat;
-//}
+cv::Vec3f CalculateMean(const cv::Mat_<cv::Vec3f> &points) {
+    
+    cv::Mat_<cv::Vec3f> result;
+    cv::reduce(points, result, 0, CV_REDUCE_AVG);
+    return result(0, 0);
+}
 
-- (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
+cv::Mat_<float> FindRigidTransform(const cv::Mat_<cv::Vec3f> &points1, const cv::Mat_<cv::Vec3f> points2) {
+    
+    /* Calculate centroids. */
+    cv::Vec3f t1 = -CalculateMean(points1);
+    cv::Vec3f t2 = -CalculateMean(points2);
+    
+    cv::Mat_<float> T1 = cv::Mat_<float>::eye(4, 4);
+    T1(0, 3) = t1[0];
+    T1(1, 3) = t1[1];
+    T1(2, 3) = t1[2];
+    
+    cv::Mat_<float> T2 = cv::Mat_<float>::eye(4, 4);
+    T2(0, 3) = -t2[0];
+    T2(1, 3) = -t2[1];
+    T2(2, 3) = -t2[2];
+    
+    /* Calculate covariance matrix for input points. Also calculate RMS deviation from centroid
+     * which is used for scale calculation.
+     */
+    cv::Mat_<float> C(3, 3, 0.0);
+    float p1Rms = 0, p2Rms = 0;
+    for (int ptIdx = 0; ptIdx < points1.rows; ptIdx++) {
+        cv::Vec3f p1 = points1(ptIdx, 0) + t1;
+        cv::Vec3f p2 = points2(ptIdx, 0) + t2;
+        p1Rms += p1.dot(p1);
+        p2Rms += p2.dot(p2);
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                C(i, j) += p2[i] * p1[j];
+            }
+        }
+    }
+    
+    cv::Mat_<float> u, s, vh;
+    cv::SVD::compute(C, s, u, vh);
+    
+    cv::Mat_<float> R = u * vh;
+    
+    if (cv::determinant(R) < 0) {
+        R -= u.col(2) * (vh.row(2) * 2.0);
+    }
+    
+    float scale = sqrt(p2Rms / p1Rms);
+    R *= scale;
+    
+    cv::Mat_<float> M = cv::Mat_<float>::eye(4, 4);
+    R.copyTo(M.colRange(0, 3).rowRange(0, 3));
+    
+    cv::Mat_<float> result = T2 * M * T1;
+    result /= result(3, 3);
+    
+    return result.rowRange(0, 3);
+}
+
+-(cv::Mat)P2sRt:(cv::Mat_<float>) P {
+    
+    cv::Mat_<float> R1;
+    cv::normalize(P.row(0)(cv::Rect(0,0,3,1)), R1);
+    
+    cv::Mat_<float> R2;
+    cv::normalize(P.row(1)(cv::Rect(0,0,3,1)), R2);
+    
+    cv::Mat_<float> R3 = R1.cross(R2);
+    vector<cv::Mat_<float>> R123;
+    
+    R123.push_back(R1);
+    R123.push_back(R2);
+    R123.push_back(R3);
+    
+    cv::Mat R;
+    cv::vconcat(R123, R);
+    return R;
+}
+
+void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
+    
+    if(R.at<float>(2, 0)!=0 || R.at<float>(2, 0)!=-1) {
+        yaw = asin(R.at<float>(2, 0));
+        pitch = atan2(R.at<float>(2, 1)/cos(yaw), R.at<float>(2, 2)/cos(yaw));
+        roll = atan2(R.at<float>(1, 0)/cos(yaw), R.at<float>(0, 0)/cos(yaw));
+    }
+    else {
+        float z = 0;
+        if(R.at<float>(2, 0)!=-1) {
+            yaw = M_PI/2;
+            pitch = z + atan2(R.at<float>(0, 1), R.at<float>(0, 2));
+        }
+        else {
+            yaw = -M_PI/2;
+            pitch = -z + atan2(-R.at<float>(0, 1), -R.at<float>(0, 2));
+        }
+    }
+}
+
+-(int) estimate_pose:(cv::Mat) targetMat :(cv::Mat &) point_2d {
+    // textureColor ==> (rgb, rgb, rgb, ...)
+    
+    int faceCount = [self process:targetMat :posTemp];
+    
+    if(faceCount>0) {
+        
+        int nver = (int)face_data.face_indices.size();
+        
+        // verticesTemp ==> (xyz, xyz, xyz, ...)
+        cv::Mat_<cv::Vec3f> targetPoints = cv::Mat_<cv::Vec3f>(nver, 1);
+        cv::Mat_<cv::Vec3f> canonicalPoints = cv::Mat_<cv::Vec3f>(nver, 1);
+        vector<std::array<float, 3>> canonical_vertices = face_data.canonical_vertices;
+        
+        for (int i=0; i<nver; i++) {
+            int ind = face_data.face_indices[i];
+            targetPoints(i,0) = cv::Vec3f(*(posTemp+ ind), *(posTemp+256*256 + ind), *(posTemp+256*256*2 + ind));
+            canonicalPoints(i,0) = cv::Vec3f(canonical_vertices[i].data()[0], canonical_vertices[i].data()[1], canonical_vertices[i].data()[2]);
+        }
+        
+        cv::Mat xy_kpt_Mat = cv::Mat(KPT_COUNT, 2, CV_32F);
+        for(int i=0; i<KPT_COUNT; i++) {
+            int x = face_data.uv_kpt_indices[i];
+            int y = face_data.uv_kpt_indices[i+KPT_COUNT];
+            int ind = y*256+x;
+            
+            xy_kpt_Mat.at<float>(i, 0) = *(posTemp+ ind);
+            xy_kpt_Mat.at<float>(i, 1) = *(posTemp+256*256 + ind);
+        }
+        
+        cv::Mat_<float> P_Mat = FindRigidTransform(canonicalPoints, targetPoints);
+        cv::Mat R_Mat = [self P2sRt:P_Mat];
+        
+        float yaw, pitch, roll;
+        matrix2angle(R_Mat, yaw, pitch, roll);
+        yaw *= 180/M_PI;
+        pitch *= 180/M_PI;
+        roll *= 180/M_PI;
+        printf("yaw = %f, pitch = %f, roll = %f\n", yaw, pitch, roll);
+        
+        float rear_size = 90;
+        float rear_depth = 0;
+        float front_size = 105;
+        float front_depth = 110;
+        float p3ds[10*3] = {-rear_size, -rear_size, rear_depth,
+                            -rear_size, rear_size, rear_depth,
+                            rear_size, rear_size, rear_depth,
+                            rear_size, -rear_size, rear_depth,
+                            -rear_size, -rear_size, rear_depth,
+                            -front_size, -front_size, front_depth,
+                            -front_size, front_size, front_depth,
+                            front_size, front_size, front_depth,
+                            front_size, -front_size, front_depth,
+                            -front_size, -front_size, front_depth };
+        cv::Mat point_3d = cv::Mat(10, 3, CV_32F, p3ds);
+        float ones[10*1] = {1,1,1,1,1, 1,1,1,1,1};
+        cv::Mat onesMat = cv::Mat(10, 1, CV_32F, ones);
+        vector<cv::Mat> mats;
+        mats.push_back(point_3d);
+        mats.push_back(onesMat);
+        
+        cv::Mat point_3d_demo;
+        cv::hconcat(mats, point_3d_demo);
+        cv::transpose(P_Mat, P_Mat);
+        point_2d = point_3d_demo*P_Mat;
+        point_2d = point_2d(cv::Rect(0,0,2,point_2d.rows));
+        
+        cv::Mat mean1;
+        cv::reduce(point_2d(cv::Rect(0,0,2,4)), mean1, 0, cv::REDUCE_AVG);
+        
+        cv::Mat mean2;
+        cv::reduce(xy_kpt_Mat(cv::Rect(0,0,2,27)), mean2, 0, cv::REDUCE_AVG);
+        
+        mean1 = cv::repeat(mean1, point_2d.rows, 1);
+        mean2 = cv::repeat(mean2, point_2d.rows, 1);
+        
+        point_2d = point_2d - mean1 + mean2;
+    }
+    return faceCount;
+}
+
+- (void)captureOutput2:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
     
     [connection setVideoOrientation:AVCaptureVideoOrientationPortrait];
     CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
@@ -209,7 +363,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
 }
 
-- (void)captureOutput2:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
+- (void)captureOutput3:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
 
     [connection setVideoOrientation:AVCaptureVideoOrientationPortrait];
     CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
@@ -220,7 +374,6 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     int width = (int)CVPixelBufferGetWidth(imageBuffer);
     int height = (int)CVPixelBufferGetHeight(imageBuffer);
-    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
     
 ////    ---MTCNN---     ////
     
@@ -292,6 +445,56 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
 }
 
+- (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
+    
+    [connection setVideoOrientation:AVCaptureVideoOrientationPortrait];
+    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    
+    CVPixelBufferLockBaseAddress(imageBuffer, 0);
+    
+    uint8_t *baseAddress = (uint8_t *)CVPixelBufferGetBaseAddress(imageBuffer);
+    
+    int width = (int)CVPixelBufferGetWidth(imageBuffer);
+    int height = (int)CVPixelBufferGetHeight(imageBuffer);
+    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
+    
+    ////    ---MTCNN---     ////
+    
+    if(planerData==NULL) {
+        planerData = (uint8_t *)malloc(width*height*3);
+    }
+    int cnt = 0;
+    int planeSize = width*height;
+    for(int i=0; i<width*height; i++) {
+        planerData[planeSize*2 + cnt] = baseAddress[i*4];
+        planerData[planeSize + cnt] = baseAddress[i*4+1];
+        planerData[cnt] = baseAddress[i*4+2];
+        cnt++;
+    }
+    
+    cv::Mat chn[] = {
+        cv::Mat(height, width, CV_8UC1, planerData),  // starting at 1st blue pixel
+        cv::Mat(height, width, CV_8UC1, planerData + planeSize),    // 1st green pixel
+        cv::Mat(height, width, CV_8UC1, planerData + planeSize*2)   // 1st red pixel
+    };
+    
+    cv::Mat frame;
+    merge(chn, 3, frame);
+    
+    cv::Mat point_2d;
+    [self estimate_pose:frame :point_2d];
+    drawPose(frame, point_2d);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[self imageView] setImage:[self UIImageFromCVMat:frame]];
+    });
+    
+    ////    ---end MTCNN---     ////
+    
+    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+    
+}
+
 -(cv::Mat) renderTexture:(cv::Mat) targetMat :(float *) textureColor :(uint8_t *) outputImage {
     
     // textureColor ==> (rgb, rgb, rgb, ...)
@@ -341,7 +544,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         cv::Mat ooo = cv::Mat(targetMat.rows, targetMat.cols, CV_8UC3, outputImage);
         cv::Mat outMat;
         
-        cv::seamlessClone(ooo, targetMat, maskMat, cv::Point(int(rect.x+rect.width/2), int(rect.y+rect.height/2)), outMat, cv::NORMAL_CLONE);
+        cv::seamlessClone(ooo, targetMat, maskMat, cv::Point(int(rect.x+rect.width/2), int(rect.y+rect.height/2)), outMat, cv::MIXED_CLONE);
         
         return outMat;
     }
@@ -375,7 +578,7 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
         float old_size = (right-left+bottom-top)/2.0;
         float centerX = right - (right-left)/2.0;
         float centerY = bottom - (bottom-top)/2 + old_size*0.14;
-        int size = int(old_size*1.38);
+        int size = int(old_size*1.32);
         
         int x1 = centerX-size/2;
         int y1 = centerY-size/2;
@@ -451,9 +654,8 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
 
         memcpy(pos, vertices.data, 256*256*3*sizeof(float));
         
-        return 1;
     }
-    return 0;
+    return num_box;
 }
 
 -(void)startCapture:(UIImageView *)capImageView {
@@ -492,8 +694,8 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     inputData = (double *)malloc(sizeof(double)*256*256*3);
     
     LoadFaceData([[[NSBundle mainBundle] resourcePath] UTF8String], &face_data);
-    
-    cv::Mat imgMat = cv::imread([[[NSBundle mainBundle] pathForResource:@"3" ofType:@"jpg"] UTF8String]);
+
+    cv::Mat imgMat = cv::imread([[[NSBundle mainBundle] pathForResource:@"ref" ofType:@"jpg"] UTF8String]);
     posTemp = (float *)malloc(256*256*3*sizeof(float));
     verticesTemp = (float *)malloc(256*256*3*sizeof(float));
     new_image = (float *)malloc(640*480*3*sizeof(float));
@@ -506,9 +708,15 @@ cv::Mat drawDetection(const cv::Mat &img, std::vector<Bbox> &box) {
     
     depth_buffer = (float *)malloc(640*480*sizeof(float));
     float *pos = (float *)malloc(256*256*3*sizeof(float));
+    
+    cv::Mat point_2d;
+    [self estimate_pose:imgMat :point_2d];
+    cout << "|||||| = "<< endl << " "  << point_2d << endl << endl;
+    
     int faceCount = [self process:imgMat :pos]; // pos ==> (rrrrr..., ggggg..., bbbbb...)
+
     if(faceCount>0) {
-        
+
         cv::Mat ref_pos1 = cv::Mat(256,256, CV_32F, pos);
         cv::Mat ref_pos2 = cv::Mat(256,256, CV_32F, pos + 256*256);
         

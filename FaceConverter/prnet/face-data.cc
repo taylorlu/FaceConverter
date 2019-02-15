@@ -96,7 +96,35 @@ bool LoadFaceData(const std::string &datapath, FaceData *face_data)
       return false; 
     }
   }
-
+    
+    // Load canonical vertices
+    {
+        std::string triangles_filename = JoinPath(datapath, "canonical_vertices.txt");
+        std::ifstream ifs(triangles_filename);
+        if (!ifs) {
+            std::cerr << "File not found or failed to open : " << triangles_filename << std::endl;
+            return false;
+        }
+        
+        std::string line;
+        while (std::getline(ifs, line)) {
+            std::stringstream ss(line);
+            std::string xs, ys, zs;
+            
+            ss >> xs >> ys >> zs;
+            
+            float x = std::stof(xs);
+            float y = std::stof(ys);
+            float z = std::stof(zs);
+            
+            face_data->canonical_vertices.push_back(std::array<float, 3>{x, y, z});
+        }
+        
+        if (face_data->canonical_vertices.size() != 43867) {
+            std::cerr << "Invalid number of canonical vertices. Must be 43867, but got " << face_data->canonical_vertices.size() << std::endl;
+            return false;
+        }
+    }
   return true;
 }
 
