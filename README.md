@@ -4,7 +4,7 @@ This project contains:
 2. Face keypoints(68) in 3D model.
 3. Face pose estimate in 3D model.
 
-# Platfrom and required
+# Platfrom and requires
     1. iPhone SE, arm64
     2. OpenCV 3.4.0
     3. NCNN
@@ -24,5 +24,16 @@ This project contains:
 
 2. Face 3D pose estimate and face keypoints in 3D.
 
-# About canonical config
+# About the configuration
 **There's 4 config files in this project.
+
+# Other details
+1. About the Euler angles.
+
+http://www.gregslabaugh.net/publications/euler.pdf
+
+2. 3D points transformation matrix.
+
+http://nghiaho.com/?page_id=671
+
+3. Render 3D texture.
