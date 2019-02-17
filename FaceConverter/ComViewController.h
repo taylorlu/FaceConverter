@@ -26,13 +26,15 @@
 
 @interface ComViewController : UIViewController<AVCaptureVideoDataOutputSampleBufferDelegate> {
     
-    bool isCapture;
     uint8_t *originData;
     
     AVCaptureVideoDataOutput *output;
     AVCaptureSession     *session;
     AVCaptureDeviceInput *inputDevice;
     AVCaptureVideoPreviewLayer   *previewLayer;
+    
+    AVCaptureDevice *frontCamera;
+    AVCaptureDevice *backCamera;
     
     CIDetector * faceDetector;
     CIDetector * textDetector;
@@ -58,14 +60,19 @@
     uint8_t *face_mask;
     uint8_t *output_image;
     float *depth_buffer;
+    bool isPoseEstimate;
     
     float *texture_color;
     
     FaceData face_data;
+    __weak IBOutlet UIButton *button;
+    __weak IBOutlet UILabel *label;
 }
 
 @property(weak, nonatomic) IBOutlet UIImageView *imageView;
+- (IBAction)swapFaceAction:(id)sender;
 
+- (IBAction)switchAction:(id)sender;
 -(void)startCapture:(UIImageView *)capImageView;
 
 @end

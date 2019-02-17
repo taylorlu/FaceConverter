@@ -57,25 +57,24 @@ bool isInside(cv::Rect rect1, cv::Rect rect2) {
     return (rect1 == (rect1&rect2));
 }
 
-cv::Mat drawKeyPoint(const cv::Mat &img, vector<uint32_t> realPos) {
+void drawKeyPoint(const cv::Mat &img, vector<uint32_t> realPos) {// 68 Key Points.
 
     std::set<uint32_t> end_list = {16, 21, 26, 41, 47, 30, 35, 67};
     if(realPos.size()==0) {
-        return img;
+        return;
     }
-    cv::Mat show = img.clone();
+
     for (int i = 0; i < KPT_COUNT; i++) {
-        cv::circle(show, cvPoint(realPos[i*2], realPos[i*2+1]), 2, CV_RGB(0, 255, 0), CV_FILLED);
+        cv::circle(img, cvPoint(realPos[i*2], realPos[i*2+1]), 2, CV_RGB(255, 255, 0), CV_FILLED);
         auto search = end_list.find(i);
         if (search != end_list.end()) {
             continue;
         }
-        cv::line(show, cvPoint(realPos[i*2], realPos[i*2+1]), cvPoint(realPos[(i+1)*2], realPos[(i+1)*2+1]), CV_RGB(255, 255, 0));
+        cv::line(img, cvPoint(realPos[i*2], realPos[i*2+1]), cvPoint(realPos[(i+1)*2], realPos[(i+1)*2+1]), CV_RGB(255, 255, 0));
     }
-    return show;
 }
 
-void drawPose(const cv::Mat &img, cv::Mat point_2d) {
+void drawPose(const cv::Mat &img, cv::Mat point_2d) {   // Perspective Box.
     
     if(!point_2d.empty()) {
         
@@ -237,10 +236,10 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
     }
 }
 
--(int) estimate_pose:(cv::Mat) targetMat :(cv::Mat &) point_2d {
+-(int) estimate_pose:(cv::Mat) targetMat :(cv::Mat &) point_2d :(vector<uint32_t> *) keypoints {
     // textureColor ==> (rgb, rgb, rgb, ...)
     
-    int faceCount = [self process:targetMat :posTemp];
+    int faceCount = [self process:targetMat :posTemp: keypoints];
     
     if(faceCount>0) {
         
@@ -256,6 +255,26 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
             targetPoints(i,0) = cv::Vec3f(*(posTemp+ ind), *(posTemp+256*256 + ind), *(posTemp+256*256*2 + ind));
             canonicalPoints(i,0) = cv::Vec3f(canonical_vertices[i].data()[0], canonical_vertices[i].data()[1], canonical_vertices[i].data()[2]);
         }
+
+        // Use canonical and target (x,y,z) to estimate transform, refer to SVD.
+        cv::Mat_<float> P_Mat = FindRigidTransform(canonicalPoints, targetPoints);
+        cv::Mat R_Mat = [self P2sRt:P_Mat];
+        
+        // Rotation Matrix convert to 3 Euler angles.
+        float yaw, pitch, roll;
+        matrix2angle(R_Mat, yaw, pitch, roll);
+        yaw *= 180/M_PI;
+        pitch *= 180/M_PI;
+        roll *= 180/M_PI;
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if(isPoseEstimate) {
+                [label setText:[NSString stringWithFormat:@"yaw = %d', pitch = %d', roll = %d'\n", (int)yaw, (int)pitch, (int)roll]];
+            }
+            else {
+                [label setText:@""];
+            }
+        });
         
         cv::Mat xy_kpt_Mat = cv::Mat(KPT_COUNT, 2, CV_32F);
         for(int i=0; i<KPT_COUNT; i++) {
@@ -267,16 +286,7 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
             xy_kpt_Mat.at<float>(i, 1) = *(posTemp+256*256 + ind);
         }
         
-        cv::Mat_<float> P_Mat = FindRigidTransform(canonicalPoints, targetPoints);
-        cv::Mat R_Mat = [self P2sRt:P_Mat];
-        
-        float yaw, pitch, roll;
-        matrix2angle(R_Mat, yaw, pitch, roll);
-        yaw *= 180/M_PI;
-        pitch *= 180/M_PI;
-        roll *= 180/M_PI;
-        printf("yaw = %f, pitch = %f, roll = %f\n", yaw, pitch, roll);
-        
+        // Calculate perspective box, 8 vertices.
         float rear_size = 90;
         float rear_depth = 0;
         float front_size = 105;
@@ -318,133 +328,6 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
     return faceCount;
 }
 
-- (void)captureOutput2:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
-    
-    [connection setVideoOrientation:AVCaptureVideoOrientationPortrait];
-    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-    
-    CVPixelBufferLockBaseAddress(imageBuffer, 0);
-    
-    uint8_t *baseAddress = (uint8_t *)CVPixelBufferGetBaseAddress(imageBuffer);
-    
-    int width = (int)CVPixelBufferGetWidth(imageBuffer);
-    int height = (int)CVPixelBufferGetHeight(imageBuffer);
-    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
-    
-    ////    ---MTCNN---     ////
-    
-    if(planerData==NULL) {
-        planerData = (uint8_t *)malloc(width*height*3);
-    }
-    int cnt = 0;
-    int planeSize = width*height;
-    for(int i=0; i<width*height; i++) {
-        planerData[planeSize*2 + cnt] = baseAddress[i*4];
-        planerData[planeSize + cnt] = baseAddress[i*4+1];
-        planerData[cnt] = baseAddress[i*4+2];
-        cnt++;
-    }
-    
-    cv::Mat chn[] = {
-        cv::Mat(height, width, CV_8UC1, planerData),  // starting at 1st blue pixel
-        cv::Mat(height, width, CV_8UC1, planerData + planeSize),    // 1st green pixel
-        cv::Mat(height, width, CV_8UC1, planerData + planeSize*2)   // 1st red pixel
-    };
-    
-    cv::Mat frame;
-    merge(chn, 3, frame);
-
-    cv::Mat outMat = [self renderTexture:frame :texture_color: output_image];
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[self imageView] setImage:[self UIImageFromCVMat:outMat]];
-    });
-    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
-    
-}
-
-- (void)captureOutput3:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
-
-    [connection setVideoOrientation:AVCaptureVideoOrientationPortrait];
-    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-    
-    CVPixelBufferLockBaseAddress(imageBuffer, 0);
-
-    uint8_t *baseAddress = (uint8_t *)CVPixelBufferGetBaseAddress(imageBuffer);
-    
-    int width = (int)CVPixelBufferGetWidth(imageBuffer);
-    int height = (int)CVPixelBufferGetHeight(imageBuffer);
-    
-////    ---MTCNN---     ////
-    
-    if(planerData==NULL) {
-        planerData = (uint8_t *)malloc(width*height*3);
-    }
-    int cnt = 0;
-    int planeSize = width*height;
-    for(int i=0; i<width*height; i++) {
-        planerData[planeSize*2 + cnt] = baseAddress[i*4];
-        planerData[planeSize + cnt] = baseAddress[i*4+1];
-        planerData[cnt] = baseAddress[i*4+2];
-        cnt++;
-    }
-
-    cv::Mat chn[] = {
-        cv::Mat(height, width, CV_8UC1, planerData),  // starting at 1st blue pixel
-        cv::Mat(height, width, CV_8UC1, planerData + planeSize),    // 1st green pixel
-        cv::Mat(height, width, CV_8UC1, planerData + planeSize*2)   // 1st red pixel
-    };
-
-    cv::Mat frame;
-    merge(chn, 3, frame);
-
-    ncnn::Mat ncnn_img = ncnn::Mat::from_pixels(frame.data, ncnn::Mat::PIXEL_BGR2RGB, frame.cols, frame.rows);
-    std::vector<Bbox> finalBbox;
-    double start_time = CACurrentMediaTime();
-    mtcnn.detect(ncnn_img, finalBbox);
-    double finish_time = CACurrentMediaTime();
-    double total_time = (double)(finish_time - start_time);
-    std::cout << "cost " << total_time * 1000 << "ms" << std::endl;
-    
-    int num_box = (int)finalBbox.size();
-    vector<uint32_t> realPos;
-    if(num_box>0) {
-        cv::Rect rect = cv::Rect(finalBbox[0].x1, finalBbox[0].y1, finalBbox[0].x2 - finalBbox[0].x1 + 1, finalBbox[0].y2 - finalBbox[0].y1 + 1);
-        
-        if(isInside(rect, cv::Rect(0,0,frame.cols,frame.rows))) {
-            
-            MLMultiArray *multiArr = [self facePRNetCoreML:frame(rect).clone()];
-            
-            int plannerSize = [[multiArr strides][0] intValue];
-            
-            for (int i=0; i<KPT_COUNT; i++) {
-                
-                int ind_y = face_data.uv_kpt_indices[i+KPT_COUNT];
-                int ind_x = face_data.uv_kpt_indices[i];
-                double u_data = *((double *)[multiArr dataPointer] + ind_y*256 + ind_x);
-                double v_data = *((double *)[multiArr dataPointer] + plannerSize + ind_y*256 + ind_x);
-                
-                realPos.push_back(uint32_t(u_data*1.1*rect.width + rect.x));
-                realPos.push_back(uint32_t(v_data*1.1*rect.width + rect.y));
-            }
-        }
-    }
-
-    cv::Mat show = drawKeyPoint(frame, realPos);
-    
-//    cv::Mat show = drawDetection(frame, finalBbox);
-    
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[self imageView] setImage:[self UIImageFromCVMat:show]];
-        
-    });
-    
-////    ---end MTCNN---     ////
-    
-    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
-    
-}
-
 - (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection  {
     
     [connection setVideoOrientation:AVCaptureVideoOrientationPortrait];
@@ -458,8 +341,6 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
     int height = (int)CVPixelBufferGetHeight(imageBuffer);
     size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
     
-    ////    ---MTCNN---     ////
-    
     if(planerData==NULL) {
         planerData = (uint8_t *)malloc(width*height*3);
     }
@@ -477,20 +358,26 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         cv::Mat(height, width, CV_8UC1, planerData + planeSize),    // 1st green pixel
         cv::Mat(height, width, CV_8UC1, planerData + planeSize*2)   // 1st red pixel
     };
-    
+    // RGB --> BGR
     cv::Mat frame;
     merge(chn, 3, frame);
     
-    cv::Mat point_2d;
-    [self estimate_pose:frame :point_2d];
-    drawPose(frame, point_2d);
-
+    if(isPoseEstimate) {
+        cv::Mat point_2d;
+        vector<uint32_t> keypoints;
+        int faceCount = [self estimate_pose:frame :point_2d: &keypoints];
+        if(faceCount>0) {
+            drawPose(frame, point_2d);
+            drawKeyPoint(frame, keypoints);
+        }
+    }
+    else {
+        frame = [self renderTexture:frame :texture_color: output_image];
+    }
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         [[self imageView] setImage:[self UIImageFromCVMat:frame]];
     });
-    
-    ////    ---end MTCNN---     ////
-    
     CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
     
 }
@@ -501,7 +388,8 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
     int w = targetMat.cols;
     int h = targetMat.rows;
     
-    int faceCount = [self process:targetMat :posTemp];
+    vector<uint32_t> keypoints;
+    int faceCount = [self process:targetMat :posTemp: &keypoints];
     
     if(faceCount>0) {
         
@@ -544,32 +432,35 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         cv::Mat ooo = cv::Mat(targetMat.rows, targetMat.cols, CV_8UC3, outputImage);
         cv::Mat outMat;
         
-        cv::seamlessClone(ooo, targetMat, maskMat, cv::Point(int(rect.x+rect.width/2), int(rect.y+rect.height/2)), outMat, cv::MIXED_CLONE);
+        cv::seamlessClone(ooo, targetMat, maskMat, cv::Point(int(rect.x+rect.width/2), int(rect.y+rect.height/2)), outMat, cv::NORMAL_CLONE);
         
         return outMat;
     }
     return targetMat;
 }
 
--(int) process: (cv::Mat) imgMat :(float *) pos{
+-(int) process: (cv::Mat) imgMat :(float *) pos :(vector<uint32_t> *)keypoints { // Detect, PRNet
     
+    // ---- MTCNN ----
     ncnn::Mat ncnn_img = ncnn::Mat::from_pixels(imgMat.data, ncnn::Mat::PIXEL_BGR2RGB, imgMat.cols, imgMat.rows);
     std::vector<Bbox> finalBbox;
 
     mtcnn.detect(ncnn_img, finalBbox);
 
     int num_box = (int)finalBbox.size();
-    vector<uint32_t> realPos;
     
-    float maxScore=0;
-    int maxProbIndex=0;
-    for(int i=0; i<finalBbox.size(); i++) {
-        if(finalBbox[i].score>maxScore) {
-            maxScore = finalBbox[i].score;
-            maxProbIndex = i;
-        }
-    }
     if(num_box>0) {
+        
+        // ---- The most probable face.
+        float maxScore=0;
+        int maxProbIndex=0;
+        for(int i=0; i<finalBbox.size(); i++) {
+            if(finalBbox[i].score>maxScore) {
+                maxScore = finalBbox[i].score;
+                maxProbIndex = i;
+            }
+        }
+        
         int left = finalBbox[maxProbIndex].x1;
         int right = finalBbox[maxProbIndex].x2;
         int top = finalBbox[maxProbIndex].y1;
@@ -591,6 +482,7 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         double transX = -x1*scale;
         double transY = -y1*scale;
         
+        // Expand face area to larger region, padding to 0 if out of bound.
         if(x2>imgMat.cols) {
             cv::copyMakeBorder(imgMat, imgMat, 0, 0, 0, x2-imgMat.cols, cv::BORDER_CONSTANT, cv::Scalar(0));
         }
@@ -605,43 +497,41 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
             cv::copyMakeBorder(imgMat, imgMat, -y1, 0, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
             y1 = 0;
         }
-        cv::Mat cropped_image;
-        cv::resize(imgMat(cv::Rect(x1, y1, width, height)), cropped_image, cv::Size(256,256));
         
-        vector<cv::Mat> xc;
-        split(cropped_image, xc);
-
-        int count = 0;
-        for(int i=0; i<256*256; i++) {
-            inputData[count++] = *(xc[2].data+i)/256.0;
-        }
-        for(int i=0; i<256*256; i++) {
-            inputData[count++] = *(xc[1].data+i)/256.0;
-        }
-        for(int i=0; i<256*256; i++) {
-            inputData[count++] = *(xc[0].data+i)/256.0;
-        }
-
-        MLMultiArray *arr = [[MLMultiArray alloc] initWithDataPointer:inputData shape:[NSArray arrayWithObjects:[NSNumber numberWithInt:3], [NSNumber numberWithInt:256], [NSNumber numberWithInt:256], nil] dataType:MLMultiArrayDataTypeDouble strides:[NSArray arrayWithObjects:[NSNumber numberWithInt:256*256], [NSNumber numberWithInt:256], [NSNumber numberWithInt:1], nil] deallocator:nil error:nil];
-
-        prnetOutput *output = [irModel predictionFromPlaceholder__0:arr error:nil];
-        MLMultiArray *multiArr = [output resfcn256__Conv2d_transpose_16__Sigmoid__0];
+        // ---- PRNet ----
+        MLMultiArray *multiArr = [self facePRNetCoreML:imgMat(cv::Rect(x1, y1, width, height)).clone()];
 
         int plannerSize = [[multiArr strides][0] intValue];
         double *dataPointer = (double *)[multiArr dataPointer];
+        
+        for (int i=0; i<KPT_COUNT; i++) {   //68 Key Points.
+            
+            int ind_y = face_data.uv_kpt_indices[i+KPT_COUNT];
+            int ind_x = face_data.uv_kpt_indices[i];
+            double u_data = *(dataPointer + ind_y*256 + ind_x);
+            double v_data = *(dataPointer + plannerSize + ind_y*256 + ind_x);
+            
+            keypoints->push_back(uint32_t(u_data*1.1*width + x1));
+            keypoints->push_back(uint32_t(v_data*1.1*width + y1));
+        }
+        
         for(int i=0; i<plannerSize*3; i++) {
             dataPointer[i] *= 1.1*256;
         }
         
+        // (posMat1, posMat2) means (u,v), posMat3 means depth (z).
         cv::Mat posMat1(1,256*256,CV_64F, dataPointer);
         cv::Mat posMat2(1,256*256,CV_64F, dataPointer + plannerSize);
         cv::Mat posMat3(1,256*256,CV_64F, dataPointer + plannerSize*2);
 
+        // Only do 2D transform to origin size. z is reserved(only scale).
+        // Since image is planner of 2D.
         double tformData[9] = {scale,0.0,transX, 0.0,scale,transY, 0.0,0.0,1.0};
         cv::Mat tform(3,3,CV_64F, tformData);
         cv::Mat z = posMat3/scale;
         posMat3.setTo(cv::Scalar(1));
 
+        // posMats is 3* 65536 Matrix.
         cv::Mat posMats;
         posMats.push_back(posMat1);
         posMats.push_back(posMat2);
@@ -652,23 +542,59 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         z.row(0).copyTo(vertices.row(2));
         vertices.convertTo(vertices, CV_32F);
 
+        // return pos(u,v,z) is refer to origin face size.
         memcpy(pos, vertices.data, 256*256*3*sizeof(float));
         
     }
     return num_box;
 }
 
+- (IBAction)swapFaceAction:(id)sender {
+    isPoseEstimate = !isPoseEstimate;
+    if(isPoseEstimate) {
+        [button setTitle:@"Face Swap" forState:UIControlStateNormal];
+    }
+    else {
+        [button setTitle:@"Pose Estimate" forState:UIControlStateNormal];
+    }
+}
+
+- (IBAction)switchAction:(id)sender {
+    
+    if(![session isRunning]) {
+        return;
+    }
+    [session removeInput:inputDevice];
+    if ([[inputDevice device] position] == AVCaptureDevicePositionFront) {
+        inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:backCamera error:nil];
+        [session addInput:inputDevice];
+    }
+    else if ([[inputDevice device] position] == AVCaptureDevicePositionBack) {
+        inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:frontCamera error:nil];
+        [session addInput:inputDevice];
+    }
+}
+
 -(void)startCapture:(UIImageView *)capImageView {
     
     NSArray *cameraArray = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
     for (AVCaptureDevice *device in cameraArray) {
+        [device lockForConfiguration:nil];
+        [device setActiveVideoMaxFrameDuration:CMTimeMake(1, 10)];
+        [device setActiveVideoMinFrameDuration:CMTimeMake(1, 15)];
+        [device unlockForConfiguration];
+        
         if ([device position] == AVCaptureDevicePositionBack) {
-            inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:device error:nil];
+            backCamera = device;
+        }
+        else if ([device position] == AVCaptureDevicePositionFront) {
+            frontCamera = device;
         }
     }
 
     session = [[AVCaptureSession alloc] init];
     session.sessionPreset = AVCaptureSessionPreset640x480;
+    inputDevice = [AVCaptureDeviceInput deviceInputWithDevice:backCamera error:nil];
     [session addInput:inputDevice];     //输入设备与session连接
     
     /*  设置输出yuv格式   */
@@ -709,11 +635,9 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
     depth_buffer = (float *)malloc(640*480*sizeof(float));
     float *pos = (float *)malloc(256*256*3*sizeof(float));
     
-    cv::Mat point_2d;
-    [self estimate_pose:imgMat :point_2d];
-    cout << "|||||| = "<< endl << " "  << point_2d << endl << endl;
-    
-    int faceCount = [self process:imgMat :pos]; // pos ==> (rrrrr..., ggggg..., bbbbb...)
+    // Feed reconstructing image to PRNet
+    vector<uint32_t> keypoints;
+    int faceCount = [self process:imgMat :pos :&keypoints]; // pos ==> (uuuuu..., vvvvv..., zzzzz...)
 
     if(faceCount>0) {
 
@@ -728,6 +652,7 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         
         imgMat.convertTo(imgMat, CV_32FC3, 1/256.0);
         
+        // remap u,v coordinates(posMat) of imgMat to remapMat
         cv::Mat remapMat;
         cv::remap(imgMat, remapMat, posMat, cv::Mat(), cv::INTER_NEAREST);
         
@@ -736,6 +661,7 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         vector<cv::Mat> xc2;
         split(remapMat, xc2);
         
+        // Render to texture_color using rgb of remapMat at 43867 points.
         for (int i=0; i<face_data.face_indices.size(); i++) {
             int ind = face_data.face_indices[i];
             texture_color[count++] = *((float *)xc2[0].data+ ind);
@@ -745,7 +671,6 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
     }
     
     [session startRunning];
-    isCapture = true;
     
 }
 

@@ -165,7 +165,6 @@ void _rasterize_triangles_core(
     }
 }
 
-
 void _render_colors_core(
     float* image, uint8_t *face_mask, float* vertices, int* triangles,
     float* colors,
@@ -217,6 +216,7 @@ void _render_colors_core(
                         p2_color = colors[c*tri_p2_ind + k];
 
                         p_color = (p0_color+p1_color+p2_color)/3;
+
                         image[y*w*c + x*c + k] = p_color;
                     }
                     face_mask[y*w + x] = 255;
