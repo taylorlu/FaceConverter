@@ -14,14 +14,14 @@ This project contains:
 
 2. Mtcnn --> resize to 256x256 --> PRNet --> 43867 vertices --> SVD to estimate pose
    Mtcnn --> resize to 256x256 --> PRNet --> 43867 vertices --> pick 68 points for sparse alignment
-                                                   
 
 # Application
 1. Face Swap, change the target face image(@"ref.jpg") to your own.
 2. Face 3D pose estimate and face keypoints in 3D.
+
 <div align="center">
-<img src="https://github.com/taylorlu/FaceConverter/tree/master/FaceConverter/pics/show-1.jpg" height="414" width="240" >
-<img src="https://github.com/taylorlu/FaceConverter/tree/master/FaceConverter/pics/show-2.jpg" height="414" width="240" >
+<img src="https://github.com/taylorlu/FaceConverter/tree/master/FaceConverter/pics/show-1.jpg">
+<img src="https://github.com/taylorlu/FaceConverter/tree/master/FaceConverter/pics/show-2.jpg">
 </div>
 
 # About the configuration
