@@ -13,7 +13,7 @@ This project contains:
 2. Mtcnn --> resize to 256x256 --> PRNet --> 43867 vertices --> SVD to estimate pose</br>
    Mtcnn --> resize to 256x256 --> PRNet --> 43867 vertices --> pick 68 points for sparse alignment
 <div align="center">
-<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/mesh.png" height="360" width="640">
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/mesh.png" height="320" width="600">
 </div>
 
 # Application
