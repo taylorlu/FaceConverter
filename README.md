@@ -1,8 +1,7 @@
-# C++ implementation of PRNet
+# C++ implementation of PRNet on iOS
 This project contains:
 1. Face reconstruct(Face swap) from only a single image.
-2. Face keypoints(68) in 3D model.
-3. Face pose estimate in 3D model.
+2. Face pose estimate and keypoints(68) in 3D model.
 
 # Platfrom and requirements
     1. iPhone SE, arm64
