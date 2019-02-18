@@ -20,8 +20,14 @@ This project contains:
 2. Face 3D pose estimate and face keypoints in 3D.
 
 <div align="center">
-<img src="https://github.com/taylorlu/FaceConverter/tree/master/FaceConverter/pics/show-1.jpg">
-<img src="https://github.com/taylorlu/FaceConverter/tree/master/FaceConverter/pics/show-2.jpg">
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-1.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-2.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-3.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-4.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-5.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-6.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-7.jpg" height="360" width="640" >
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/show-8.jpg" height="360" width="640" >
 </div>
 
 # About the configuration
