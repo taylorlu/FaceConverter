@@ -32,7 +32,22 @@ This project contains:
 </div>
 
 # About the configuration
-**There's 4 config files in this project.
+There's 4 config files in this project.
+
+    1. face_ind.txt
+This file is the index of [0,65535], which is the region of the **WHITE** area of the image[256x256] below.
+<div align="center">
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/mesh.png" height="320" width="600">
+</div>
+
+    2. uv_kpt_ind.txt
+This file is the index of coordinate(x,y) for 68 keypoints refer to face_ind.txt
+
+    3. triangles.txt
+86906 triangles' vertices index refer to face_ind.txt
+
+    4. canonical_vertices.txt
+canonical model for pose estimate, there's coordinate (uv,z) of 43867 vertices
 
 # Other details
 1. About the Euler angles.
