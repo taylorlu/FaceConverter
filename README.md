@@ -37,7 +37,7 @@ There's 4 config files in this project.
     1. face_ind.txt
 This file is the index of [0,65535], which is the region of the **WHITE** area of the image[256x256] below.
 <div align="center">
-<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/mesh.png" height="320" width="600">
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/uv_face_mask.png" height="256" width="256">
 </div>
 
     2. uv_kpt_ind.txt
