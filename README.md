@@ -42,9 +42,15 @@ This file is the index of [0,65535], which is the region of the **WHITE** area o
 
     2. uv_kpt_ind.txt
 This file is the index of coordinate(x,y) for 68 keypoints refer to face_ind.txt
+<div align="center">
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/uv_kpt_mask.png" height="256" width="256">
+</div>
 
     3. triangles.txt
 86906 triangles' vertices index refer to face_ind.txt
+<div align="center">
+<img src="https://github.com/taylorlu/FaceConverter/blob/master/FaceConverter/pics/triangles.png" height="300" width="256">
+</div>
 
     4. canonical_vertices.txt
 canonical model for pose estimate, there's coordinate (uv,z) of 43867 vertices
@@ -59,3 +65,5 @@ http://www.gregslabaugh.net/publications/euler.pdf
 http://nghiaho.com/?page_id=671
 
 3. Render 3D texture.
+
+http://blackpawn.com/texts/pointinpoly/
