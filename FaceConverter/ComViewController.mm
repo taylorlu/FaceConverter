@@ -481,6 +481,8 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         double scale = 256.0/width;
         double transX = -x1*scale;
         double transY = -y1*scale;
+        int rectify_x1 = x1;
+        int rectify_y1 = y1;
         
         // Expand face area to larger region, padding to 0 if out of bound.
         if(x2>imgMat.cols) {
@@ -488,18 +490,18 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
         }
         if(x1<0) {
             cv::copyMakeBorder(imgMat, imgMat, 0, 0, -x1, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
-            x1 = 0;
+            rectify_x1 = 0;
         }
         if(y2>imgMat.rows) {
             cv::copyMakeBorder(imgMat, imgMat, 0, y2-imgMat.rows, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
         }
         if(y1<0) {
             cv::copyMakeBorder(imgMat, imgMat, -y1, 0, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
-            y1 = 0;
+            rectify_y1 = 0;
         }
         
         // ---- PRNet ----
-        MLMultiArray *multiArr = [self facePRNetCoreML:imgMat(cv::Rect(x1, y1, width, height)).clone()];
+        MLMultiArray *multiArr = [self facePRNetCoreML:imgMat(cv::Rect(rectify_x1, rectify_y1, width, height)).clone()];
 
         int plannerSize = [[multiArr strides][0] intValue];
         double *dataPointer = (double *)[multiArr dataPointer];
