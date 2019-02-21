@@ -442,7 +442,7 @@ void matrix2angle(cv::Mat R, float &yaw, float &pitch, float &roll) {
 -(int) process: (cv::Mat) imgMat :(float *) pos :(vector<uint32_t> *)keypoints { // Detect, PRNet
     
     // ---- MTCNN ----
-    ncnn::Mat ncnn_img = ncnn::Mat::from_pixels(imgMat.data, ncnn::Mat::PIXEL_BGR2RGB, imgMat.cols, imgMat.rows);
+    ncnn::Mat ncnn_img = ncnn::Mat::from_pixels(imgMat.data, ncnn::Mat::PIXEL_RGB, imgMat.cols, imgMat.rows);
     std::vector<Bbox> finalBbox;
 
     mtcnn.detect(ncnn_img, finalBbox);
