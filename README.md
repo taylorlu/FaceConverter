@@ -3,6 +3,8 @@ This project contains:
 1. Face reconstruct(Face swap) from only a single image.
 2. Face pose estimate and keypoints(68) in 3D model.
 
+The origin python code with training is in [**PRNet**.](https://github.com/YadiraF/PRNet)
+
 # Platfrom and requirements
     1. iPhone SE, arm64
     2. OpenCV 3.4.0
